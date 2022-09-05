@@ -1,0 +1,217 @@
+def report():
+    import pandas as pd
+    import datetime
+    import matplotlib.pyplot as plt
+    from datetime import date
+    import xlsxwriter
+    import time
+    
+    start=time.time()
+    rep=xlsxwriter.Workbook("Pipeline Report.xlsx")
+    wks1=rep.add_worksheet('Wins Losses & Declines')
+    wks1.hide_gridlines(2)
+    wks2=rep.add_worksheet('Pipeline Summary')
+    wks2.hide_gridlines(2)
+
+    #reading the opportunity sheet
+    df=pd.read_excel(r'C:\Users\ayush\Downloads\Python Codes\Dashboard in excel\Sample - Copy.xlsx', sheet_name=1)
+
+    #setting the FY22 year-start date
+    fy22=datetime.datetime(2021,7,5)
+
+    #analyzing for the WLD FY22
+    #filtering the dataframe based on outcome 
+    a=df[df['Outcome'].isin(['Declined','Lost','Won'])]
+    b=a.reset_index(0)
+    #removing all entries except FY22 ones
+    for x in range(len(b)):
+        if b['Effective Close Date'][x] < fy22:
+            b.drop(x,inplace=True)
+        else:
+            continue
+
+    #wins by SL graph
+    c=b[b['Outcome'].isin(['Won'])]
+    d=c.pivot_table(index='Service Line',values='Total Value Of Potential Sale constant',aggfunc='sum')
+    n=d.to_records()
+    dd={}
+    lab=[]
+    for x in enumerate(n):
+        dd[x[1][0]]=x[1][1]
+        lab.append(x[1][0]+', $'+str("{:,}".format(int(x[1][1]/1000))))
+    cc=dd.keys()
+    dc=dd.values()
+    fig,ax=plt.subplots()
+    ax.pie(dc, labels=lab)
+    plt.title('Wins by SL')
+    fig.savefig('Wins by SL.png')
+    wks1.insert_image('A22','Wins by SL.png')
+
+    #top 10 wins table
+    d=c.pivot_table(index=['Delivery Area','Service Line','Sub Service Line','Delivery Location','Client','Opportunity ID','Opportunity','Effective Close Date','Opportunity Partner Director','Pursuit Leader'],values='Total Value Of Potential Sale constant',aggfunc='sum')
+    d=d.sort_values('Total Value Of Potential Sale constant', ascending=False)
+    d=d.reset_index()
+    d=d.loc[0:9]
+    cell_format=rep.add_format({'bold': True})
+    c_f=rep.add_format({'border': True,'text_wrap': True})
+    c_f1=rep.add_format({'border': True,'bg_color':'C4C4CD','bold':True,'text_wrap': True})
+    c_f2=rep.add_format({'num_format':'dd-mm-yyyy','border': True})
+    c_f3=rep.add_format({'num_format':'#,##,','border': True})
+    c_f4=rep.add_format({'border': True,'text_wrap': True, 'bold': True})
+    wks1.write(0,0,"All values are as of FYTD and in '000$")
+    for x in range(13):
+        wks1.set_column(7,x,20)
+    wks1.write('A5','Top 10 Wins By Value',cell_format)
+    wks1.write_row('A6',d.columns,c_f1)
+    wks1.write_column('A7',d['Delivery Area'],c_f)
+    wks1.write_column('B7',d['Service Line'],c_f)
+    wks1.write_column('C7',d['Sub Service Line'],c_f)
+    wks1.write_column('D7',d['Delivery Location'],c_f)
+    wks1.write_column('E7',d['Client'],c_f)
+    wks1.write_column('F7',d['Opportunity ID'],c_f)
+    wks1.write_column('G7',d['Opportunity'],c_f)
+    wks1.write_column('H7',d['Effective Close Date'],c_f2)
+    wks1.write_column('I7',d['Opportunity Partner Director'],c_f)
+    wks1.write_column('J7',d['Pursuit Leader'],c_f)
+    wks1.write_column('K7',d['Total Value Of Potential Sale constant'],c_f3)
+
+    #closed opps by outcome graph
+    f=b.pivot_table(index='Outcome', values='Total Value Of Potential Sale constant',aggfunc='sum')
+    fig1,ax1=plt.subplots()
+    pps=ax1.bar(f.index,f['Total Value Of Potential Sale constant'],color='#FFE600')
+    ax1.yaxis.set_visible(False)
+    for p in pps:
+       height = p.get_height()
+       ax1.annotate('{}'.format('$'+str("{:,}".format(int(height/1000)))),
+          xy=(p.get_x() + p.get_width() / 2, height),
+          xytext=(0, 3), # 3 points vertical offset
+          textcoords="offset points",
+          ha='center', va='center')
+    plt.title('Closed Opportunties by Outcome')
+    fig1.savefig('Closed Opportunties by Outcome.png')
+    wks1.insert_image('G22','Closed Opportunties by Outcome.png')
+
+    #count of wld
+    f=b.pivot_table(index='Outcome', values='Total Value Of Potential Sale constant',aggfunc='count')
+    wks1.write('A2',"No. of Won Opportunities are "+str(f['Total Value Of Potential Sale constant']['Won']))
+    wks1.write('A3',"No. of Lost Opportunities are "+str(f['Total Value Of Potential Sale constant']['Lost']))
+    wks1.write('A4',"No. of Declined Opportunities are "+str(f['Total Value Of Potential Sale constant']['Declined']))
+
+    #win-loss assessment
+    wl=b.pivot_table(index='Outcome Reason',columns='Outcome',values='Total Value Of Potential Sale constant',aggfunc='count',fill_value=0,margins=True,margins_name="Totals")
+    wl=wl.reset_index()
+    wks1.write('A47',"Win-Loss Assessment",cell_format)
+    wks1.write_row('A48',wl.columns,c_f1)
+    wks1.write_column('A49',wl['Outcome Reason'],c_f)
+    wks1.write_column('B49',wl['Declined'],c_f)
+    wks1.write_column('C49',wl['Lost'],c_f)
+    wks1.write_column('D49',wl['Won'],c_f)
+    wks1.write_column('E49',wl['Totals'],c_f4)
+
+    #analyzing for the Pipeline
+    #filtering the values with outcome blank
+    a=df['Outcome'].isnull()
+    b=df[a]
+
+    #Pipeline by SL graph
+    c=b.pivot_table(index='Service Line',values='Total Value Of Potential Sale constant',aggfunc='sum')
+    n=c.to_records()
+    dd={}
+    lab=[]
+    for x in enumerate(n):
+        dd[x[1][0]]=x[1][1]
+        lab.append(x[1][0]+', $'+str("{:,}".format(int(x[1][1]/1000))))
+    cc=dd.keys()
+    dc=dd.values()
+    explode=(0.1, 0.0, 0.2, 0.3, 0.0)
+    fig2,ax2=plt.subplots()
+    ax2.pie(dc, labels=lab,explode=explode)
+    plt.title('Pipeline by SL')
+    fig2.savefig('Pipeline by SL.png')
+    wks2.insert_image('A22','Pipeline by SL.png')
+
+    #pipeline by delivery area graph
+    c=b.pivot_table(index='Delivery Area',values='Total Value Of Potential Sale constant',aggfunc='sum')
+    fig3,ax3=plt.subplots()
+    pps=ax3.bar(c.index,c['Total Value Of Potential Sale constant'],color='#FFE600')
+    ax3.yaxis.set_visible(False)
+    for p in pps:
+       height = p.get_height()
+       ax3.annotate('{}'.format('$'+str("{:,}".format(int(height/1000)))),
+          xy=(p.get_x() + p.get_width() / 2, height),
+          xytext=(0, 3), # 3 points vertical offset
+          textcoords="offset points",
+          ha='center', va='center')
+    plt.title('Pipeline by Delivery Area')
+    fig3.savefig('Pipeline by Delivery Area.png')
+    wks2.insert_image('G22','Pipeline by Delivery Area.png')
+
+    #weighted value of pipeline
+    su=b['Weighted Value Of Potential Sale constant'].sum(axis=0)
+
+    #value and count of lapsed pipeline
+    cou=0
+    val=0
+    c=b.reset_index()
+    for x in range(len(c)):
+        if c['Anticipated Win Date'][x] <= date.today():
+            cou+=1
+            val+=c['Total Value Of Potential Sale constant'][x]
+
+    wks2.write(0,0,"All values are as of FYTD and in '000$")
+    wks2.write(1,0,'Value of Lapsed Opportunities is $'+str("{:,}".format(int(val/1000))))
+    wks2.write(2,0,'No. of Lapsed Opportunities are '+str(cou))
+    wks2.write(3,0,'Weighted Value of Pipeline is $'+str("{:,}".format(int(su/1000))))
+
+    #top 10 opps table
+    c=b.pivot_table(index=['Delivery Area','Service Line','Sub Service Line','Delivery Location','Client','Opportunity ID','Opportunity','Stage','Win Probability','Anticipated Win Date','Opportunity Partner Director','Pursuit Leader'],values='Total Value Of Potential Sale constant',aggfunc='sum')
+    c=c.sort_values('Total Value Of Potential Sale constant', ascending=False)
+    c=c.reset_index()
+    c=c.loc[0:9]
+    for x in range(13):
+        wks2.set_column(4,x,20)
+    wks2.write('A5','Top 10 Opportunities By Value',cell_format)
+    wks2.write_row('A6',c.columns,c_f1)
+    wks2.write_column('A7',c['Delivery Area'],c_f)
+    wks2.write_column('B7',c['Service Line'],c_f)
+    wks2.write_column('C7',c['Sub Service Line'],c_f)
+    wks2.write_column('D7',c['Delivery Location'],c_f)
+    wks2.write_column('E7',c['Client'],c_f)
+    wks2.write_column('F7',c['Opportunity ID'],c_f)
+    wks2.write_column('G7',c['Opportunity'],c_f)
+    wks2.write_column('H7',c['Stage'],c_f)
+    wks2.write_column('I7',c['Win Probability'],c_f)
+    wks2.write_column('J7',c['Anticipated Win Date'],c_f2)
+    wks2.write_column('K7',c['Opportunity Partner Director'],c_f)
+    wks2.write_column('L7',c['Pursuit Leader'],c_f)
+    wks2.write_column('M7',c['Total Value Of Potential Sale constant'],c_f3)
+
+    #opps about to lapse in 30 days
+    c=b.pivot_table(index=['Delivery Area','Service Line','Sub Service Line','Delivery Location','Client','Opportunity ID','Opportunity','Stage','Win Probability','Anticipated Win Date','Opportunity Partner Director','Pursuit Leader'],values='Total Value Of Potential Sale constant',aggfunc='sum')
+    c=c.reset_index()
+    for x in range(len(c)):
+        if (c['Anticipated Win Date'][x] > date.today()) & (c['Anticipated Win Date'][x] <= (date.today()+datetime.timedelta(days=30))):
+            continue
+        else:
+            c.drop(x,inplace=True)
+
+    wks2.write('A47',"Opportunities Lapsing in the next 30 Days",cell_format)        
+    wks2.write_row('A48',c.columns,c_f1)
+    wks2.write_column('A49',c['Delivery Area'],c_f)
+    wks2.write_column('B49',c['Service Line'],c_f)
+    wks2.write_column('C49',c['Sub Service Line'],c_f)
+    wks2.write_column('D49',c['Delivery Location'],c_f)
+    wks2.write_column('E49',c['Client'],c_f)
+    wks2.write_column('F49',c['Opportunity ID'],c_f)
+    wks2.write_column('G49',c['Opportunity'],c_f)
+    wks2.write_column('H49',c['Stage'],c_f)
+    wks2.write_column('I49',c['Win Probability'],c_f)
+    wks2.write_column('J49',c['Anticipated Win Date'],c_f2)
+    wks2.write_column('K49',c['Opportunity Partner Director'],c_f)
+    wks2.write_column('L49',c['Pursuit Leader'],c_f)
+    wks2.write_column('M49',c['Total Value Of Potential Sale constant'],c_f3)
+
+
+    rep.close()
+    print("Time taken is", time.time()-start)
+report()
